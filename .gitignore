@@ -19,7 +19,6 @@ data/valid/
 *generated_qa_pairs.json
 
 # Model Checkpoints & Logs (Hugging Face / TensorBoard)
-checkpoint-*/
 runs/
 *.log
 homework/demo_train/
