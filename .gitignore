@@ -1,0 +1,27 @@
+# Environments
+.venv/
+venv/
+env/
+
+# Mac / VS Code
+.DS_Store
+.vscode/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Downloaded Data & Generated Datasets
+*.zip
+data/train/
+data/valid/
+*qa_pairs.json
+
+# Model Checkpoints & Logs (Hugging Face / TensorBoard)
+checkpoint-*/
+runs/
+*.log
+homework/demo_train/
+homework/vlm_model/
+homework/clip_model/
