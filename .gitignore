@@ -16,7 +16,7 @@ __pycache__/
 *.zip
 data/train/
 data/valid/
-*qa_pairs.json
+*generated_qa_pairs.json
 
 # Model Checkpoints & Logs (Hugging Face / TensorBoard)
 checkpoint-*/
