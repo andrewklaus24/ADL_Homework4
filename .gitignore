@@ -24,3 +24,10 @@ runs/
 homework/demo_train/
 homework/vlm_model/
 homework/clip_model/
+
+# Ignore intermediate Trainer checkpoints
+checkpoint-*/
+
+# Ignore TensorBoard logging files
+events.out.tfevents.*
+tensorboard/

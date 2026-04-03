@@ -110,9 +110,10 @@ def generate_dataset(data_dir: str = "data/train", output_name: str = "generated
             
             try:
                 captions = generate_caption(str(info_file), view_index)
+                merged_caption = " ".join(captions)
                 dataset.append({
-                    "image_path": str(img_path),
-                    "caption": captions
+                    "image_file": f"{data_path.name}/{img_name}",
+                    "caption": merged_caption
                 })
             except Exception as e:
                 print(f"Error processing {info_file} view {view_index}: {e}")

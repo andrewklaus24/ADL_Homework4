@@ -6,6 +6,7 @@ import torch.nn as nn
 import torchvision as tv
 from peft import LoraConfig, TaskType, get_peft_model
 from PIL import Image
+import math
 from torch.utils.data import Dataset
 from torch.utils.tensorboard import SummaryWriter
 import torch.nn.functional as F
@@ -104,7 +105,7 @@ class CLIP(nn.Module):
         self.text_encoder = text_encoder
         self.vision_projection = nn.Linear(vision_encoder.config.hidden_size, proj_dim)
         self.text_projection = nn.Linear(text_encoder.config.hidden_size, proj_dim)
-        self.temperature = temperature
+        self.temperature = nn.Parameter(torch.tensor(math.log(1.0 / temperature)))
 
     def encode_image(self, image: torch.Tensor) -> torch.Tensor:
         return self.vision_encoder(image)
@@ -189,9 +190,11 @@ class CLIP(nn.Module):
 
         # pass text through the text encoder and project output
         text_outputs = self.text_encoder(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+
         # find actual sequence lengths for each item in the batch using attention mask
         sequence_lengths = attention_mask.sum(dim=-1) - 1
         batch_size = input_ids.shape[0]
+
         # grab last valid token
         text_features = text_outputs[torch.arange(batch_size, device=input_ids.device), sequence_lengths]
         text_features = self.text_projection(text_features)
@@ -256,7 +259,7 @@ def train(
     per_device_train_batch_size: int = 1024,
     gradient_accumulation_steps: int = 1,
     learning_rate: float = 5e-4,
-    num_workers: int = 16,
+    num_workers: int = 128,
 ):
     vlm = BaseVLM()
 
@@ -277,8 +280,8 @@ def train(
     peft_config = LoraConfig(
         task_type=TaskType.FEATURE_EXTRACTION,
         inference_mode=False,
-        r=8,
-        lora_alpha=32,
+        r=32,
+        lora_alpha=128,
         lora_dropout=0.0,
         # target_modules="all-linear",
         target_modules=get_target_modules_for_lora(model),
