@@ -46,7 +46,7 @@ def clip_data_collator(features: list[dict[str, torch.Tensor]]) -> dict[str, tor
     Custom data collator for CLIP training.
     """
     # get raw texts and batch tokenize them using the processor
-    texts = [f["input_ids"] for f in features]
+    texts = [f["text"] for f in features]
     text_inputs = processor(text=texts, return_tensors="pt", padding=True, truncation=True)
 
     # stack pre-processed images
@@ -307,6 +307,7 @@ def train(
         save_total_limit=2,
         label_names=["labels"],
         dataloader_num_workers=num_workers,
+        remove_unused_columns=False
     )
 
     trainer = Trainer(
