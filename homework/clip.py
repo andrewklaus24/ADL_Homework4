@@ -45,22 +45,18 @@ def clip_data_collator(features: list[dict[str, torch.Tensor]]) -> dict[str, tor
     """
     Custom data collator for CLIP training.
     """
-    # Get max sequence length
-    max_length = max(f["input_ids"].shape[0] for f in features)
+    # get raw texts and batch tokenize them using the processor
+    texts = [f["input_ids"] for f in features]
+    text_inputs = processor(text=texts, return_tensors="pt", padding=True, truncation=True)
 
-    def pad_tensor(tensor, pad_value):
-        return torch.cat([tensor, torch.full((max_length - tensor.shape[0],), pad_value, dtype=tensor.dtype)])
-
-    input_ids = torch.stack([pad_tensor(f["input_ids"], pad_value=processor.tokenizer.eos_token_id) for f in features])
-    attention_mask = torch.stack([pad_tensor(f["attention_mask"], pad_value=0) for f in features])
-    pixel_values = torch.stack([f["pixel_values"] for f in features])  # assume all are same shape
-    labels = torch.stack([pad_tensor(f["labels"], pad_value=-100) for f in features])
+    # stack pre-processed images
+    pixel_values = torch.stack([f["pixel_values"] for f in features])
 
     return {
-        "input_ids": input_ids.long(),
-        "attention_mask": attention_mask.long(),
+        "input_ids": text_inputs["input_ids"].long(),
+        "attention_mask": text_inputs["attention_mask"].long(),
         "pixel_values": pixel_values.float(),
-        "labels": labels.long(),
+        "labels": text_inputs["input_ids"].long(),
     }
 
 
@@ -84,15 +80,12 @@ class CaptionDatasetForTraining(Dataset):
         item = self.dataset[idx]
         image = Image.open(item["image_path"]).convert("RGB")
         pixel_values = self.image_processor(image)
+        
         text = item["caption"] + self.processor.tokenizer.eos_token
-        text_inputs = self.processor(text=text, return_tensors="pt", padding=True, truncation=True)
-        input_ids = text_inputs["input_ids"].squeeze(0).long()
-        attention_mask = text_inputs["attention_mask"].squeeze(0)
+        
         return {
             "pixel_values": pixel_values,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "labels": input_ids,  # placeholder to fit the collator
+            "text": text,
         }
 
 
@@ -255,11 +248,11 @@ def get_target_modules_for_lora(model: nn.Module) -> list[str]:
 def train(
     data_dir: Path | None = None,
     output_dir: str = "clip",
-    num_train_epochs: float = 0.05,  # for debugging purpose, increase this once the dry run works
-    per_device_train_batch_size: int = 1024,
-    gradient_accumulation_steps: int = 1,
-    learning_rate: float = 5e-4,
-    num_workers: int = 128,
+    num_train_epochs: float = 5,  # for debugging purpose, increase this once the dry run works
+    per_device_train_batch_size: int = 256,
+    gradient_accumulation_steps: int = 4,
+    learning_rate: float = 1e-4,
+    num_workers: int = 12,
 ):
     vlm = BaseVLM()
 
@@ -280,8 +273,8 @@ def train(
     peft_config = LoraConfig(
         task_type=TaskType.FEATURE_EXTRACTION,
         inference_mode=False,
-        r=32,
-        lora_alpha=128,
+        r=16,
+        lora_alpha=32,
         lora_dropout=0.0,
         # target_modules="all-linear",
         target_modules=get_target_modules_for_lora(model),
