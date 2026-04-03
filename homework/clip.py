@@ -8,6 +8,7 @@ from peft import LoraConfig, TaskType, get_peft_model
 from PIL import Image
 from torch.utils.data import Dataset
 from torch.utils.tensorboard import SummaryWriter
+import torch.nn.functional as F
 from transformers import AutoProcessor, Trainer, TrainingArguments
 
 from .base_vlm import BaseVLM
@@ -101,8 +102,9 @@ class CLIP(nn.Module):
         super().__init__()
         self.vision_encoder = vision_encoder
         self.text_encoder = text_encoder
-        # TODO: implement the rest components
-        raise NotImplementedError("Not implemented")
+        self.vision_projection = nn.Linear(vision_encoder.config.hidden_size, proj_dim)
+        self.text_projection = nn.Linear(text_encoder.config.hidden_size, proj_dim)
+        self.temperature = temperature
 
     def encode_image(self, image: torch.Tensor) -> torch.Tensor:
         return self.vision_encoder(image)
@@ -180,7 +182,25 @@ class CLIP(nn.Module):
         Returns:
             TODO: think about the what values should be returned
         """
-        raise NotImplementedError("Not implemented")
+        # pass image through the vision encoder and project output
+        vision_outputs = self.vision_encoder(pixel_values).last_hidden_state
+        vision_features = vision_outputs.mean(dim=1)  # global average pooling
+        vision_features = self.vision_projection(vision_features)
+
+        # pass text through the text encoder and project output
+        text_outputs = self.text_encoder(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        # find actual sequence lengths for each item in the batch using attention mask
+        sequence_lengths = attention_mask.sum(dim=-1) - 1
+        batch_size = input_ids.shape[0]
+        # grab last valid token
+        text_features = text_outputs[torch.arange(batch_size, device=input_ids.device), sequence_lengths]
+        text_features = self.text_projection(text_features)
+
+        # normalize projected embeddings
+        vision_features = F.normalize(vision_features, p=2, dim=-1)
+        text_features = F.normalize(text_features, p=2, dim=-1)
+
+        return vision_features, text_features, self.temperature
 
 
 def compute_clip_loss(
@@ -199,8 +219,21 @@ def compute_clip_loss(
     Returns:
         The loss for the CLIP model.
     """
-    raise NotImplementedError("Not implemented")
+    vision_features, text_features, temperature = outputs
 
+    # compute dot product similarity between vision and text features
+    logits_per_image = torch.matmul(vision_features, text_features.T) * torch.exp(temperature)
+    logits_per_text = logits_per_image.T
+
+    # create target labels
+    batch_size = vision_features.shape[0]
+    target_labels = torch.arange(batch_size, device=vision_features.device)
+
+    # compute cross-entropy loss
+    loss_img = F.cross_entropy(logits_per_image, target_labels)
+    loss_text = F.cross_entropy(logits_per_text, target_labels)
+
+    return (loss_img + loss_text) / 2   
 
 def get_target_modules_for_lora(model: nn.Module) -> list[str]:
     target_modules = []
